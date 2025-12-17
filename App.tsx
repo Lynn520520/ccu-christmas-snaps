@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { PolaroidCamera } from './components/PolaroidCamera';
 import { FrameDesign } from './components/FrameDesign';
 import { DraggablePhoto } from './components/DraggablePhoto';
 import { FrameStyle, PhotoData } from './types';
-import { Check, User, Download, Sparkles, Camera, Images, Trash2, Hand } from 'lucide-react';
+import { Check, User, Download, Sparkles, Camera, Image, Trash2, Hand } from 'lucide-react';
 import { generatePolaroidCanvas } from './utils/polaroidGenerator';
 import { saveFile } from './utils/downloadUtils';
 import JSZip from 'jszip';
@@ -361,7 +361,7 @@ export default function App() {
              className={`flex flex-col items-center justify-center py-3 px-6 transition-colors duration-200 ${activeTab === 'canvas' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
           >
              <div className="relative">
-                <Images size={24} className={activeTab === 'canvas' ? 'fill-current' : ''} />
+                <Image size={24} className={activeTab === 'canvas' ? 'fill-current' : ''} />
                 {photos.length > 0 && (
                     <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold shadow-sm animate-in zoom-in">
                         {photos.length}
