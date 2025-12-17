@@ -3,6 +3,7 @@ import { PhotoData } from '../types';
 import { FrameDesign } from './FrameDesign';
 import { X, RefreshCw, Download } from 'lucide-react';
 import { generatePolaroidCanvas } from '../utils/polaroidGenerator';
+import { saveFile } from '../utils/downloadUtils';
 
 interface DraggablePhotoProps {
   photo: PhotoData;
@@ -153,11 +154,15 @@ export const DraggablePhoto: React.FC<DraggablePhotoProps> = ({
 
   const handleDownload = async () => {
     const canvas = await generatePolaroidCanvas(photo);
-    const link = document.createElement('a');
-    const sanitizedName = photo.userName ? photo.userName.replace(/[^a-z0-9]/gi, '_') : 'Guest';
-    link.download = `CCU-Polaroid-${sanitizedName}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    // Use toBlob instead of toDataURL for better mobile sharing support
+    canvas.toBlob((blob) => {
+        if (blob) {
+            const sanitizedName = photo.userName ? photo.userName.replace(/[^a-z0-9]/gi, '_') : 'Guest';
+            // Added timestamp to filename to prevent conflicts
+            const timestamp = new Date().toISOString().slice(11, 19).replace(/:/g, '');
+            saveFile(blob, `CCU-Polaroid-${sanitizedName}-${timestamp}.png`);
+        }
+    }, 'image/png');
   };
 
   return (
@@ -227,4 +232,4 @@ export const DraggablePhoto: React.FC<DraggablePhotoProps> = ({
       </div>
     </div>
   );
-};
+}

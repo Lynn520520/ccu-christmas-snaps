@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { AlertCircle, SwitchCamera, RefreshCw } from 'lucide-react';
 
 interface PolaroidCameraProps {
+  // Updated to accept null to match useRef initial value type behavior in strict mode
   videoRef: React.RefObject<HTMLVideoElement | null>;
   onShutter: () => void;
   isFlashing: boolean;
@@ -9,35 +10,55 @@ interface PolaroidCameraProps {
 
 export const PolaroidCamera: React.FC<PolaroidCameraProps> = ({ videoRef, onShutter, isFlashing }) => {
   const [error, setError] = useState<string | null>(null);
+  // Default to user (front camera)
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const stopTracks = useCallback(() => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+    }
+  }, [videoRef]);
+
+  const setupCamera = useCallback(async () => {
+    stopTracks(); // Stop existing stream before starting new one
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          facingMode: facingMode, 
+          width: { ideal: 1080 },
+          height: { ideal: 1080 },
+          aspectRatio: 1
+        }
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (err) {
+      setError("Camera access denied.");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [facingMode, stopTracks, videoRef]);
 
   useEffect(() => {
-    async function setupCamera() {
-      try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            width: { ideal: 1080 },
-            height: { ideal: 1080 },
-            aspectRatio: 1
-          }
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
-      } catch (err) {
-        setError("Camera access denied.");
-        console.error(err);
-      }
-    }
     setupCamera();
+    return () => stopTracks();
+  }, [setupCamera, stopTracks]);
 
-    // Cleanup tracks on unmount
-    return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [videoRef]);
+  const toggleCamera = () => {
+    setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+  };
+
+  const handleRetry = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent shutter trigger if clicking retry
+    setupCamera();
+  };
 
   return (
     <div className="relative w-[280px] h-[280px] select-none z-20">
@@ -49,15 +70,26 @@ export const PolaroidCamera: React.FC<PolaroidCameraProps> = ({ videoRef, onShut
             CCU OIA
           </div>
 
-          {/* Flash - Moved Down closer to lens */}
-          <div className={`absolute top-14 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-slate-200 transition-colors duration-100 z-30 ${isFlashing ? 'bg-yellow-300 shadow-[0_0_50px_rgba(253,224,71,1)] scale-150' : 'bg-yellow-100'}`}></div>
+          {/* Flash */}
+          <div className={`absolute top-6 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-slate-200 transition-colors duration-100 z-30 ${isFlashing ? 'bg-yellow-300 shadow-[0_0_50px_rgba(253,224,71,1)] scale-150' : 'bg-yellow-100'}`}></div>
 
           {/* Shutter Button (Purple/Blue) */}
           <button 
              onClick={onShutter}
-             className="absolute top-6 right-6 w-12 h-12 bg-indigo-400 rounded-full shadow-lg border-4 border-white active:scale-95 active:bg-indigo-600 transition-transform z-30 hover:shadow-indigo-500/30"
+             disabled={!!error || isLoading}
+             className="absolute top-6 right-6 w-12 h-12 bg-indigo-400 rounded-full shadow-lg border-4 border-white active:scale-95 active:bg-indigo-600 transition-transform z-30 hover:shadow-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
              aria-label="Capture"
           ></button>
+
+          {/* Camera Toggle Button (Bottom Left) - HIGH VISIBILITY UPDATE */}
+          <button
+            onClick={toggleCamera}
+            disabled={!!error}
+            className="absolute bottom-5 left-5 z-40 w-10 h-10 flex items-center justify-center bg-white rounded-full text-slate-800 shadow-xl hover:bg-slate-50 transition-all border-2 border-slate-200 active:scale-90 active:bg-indigo-50 disabled:opacity-50"
+            title="Switch Camera"
+          >
+            <SwitchCamera size={22} strokeWidth={2.5} />
+          </button>
 
           {/* Rainbow Stripe */}
           <div className="absolute top-1/2 left-0 w-full h-5 -translate-y-1/2 flex z-0 opacity-90">
@@ -73,20 +105,35 @@ export const PolaroidCamera: React.FC<PolaroidCameraProps> = ({ videoRef, onShut
              <div className="absolute inset-1 border-2 border-slate-700 rounded-full opacity-50"></div>
              
              {/* Video Container (The Lens Glass) */}
-             <div className="w-40 h-40 rounded-full overflow-hidden bg-black border-4 border-slate-800 relative shadow-inner">
+             <div className="w-40 h-40 rounded-full overflow-hidden bg-black border-4 border-slate-800 relative shadow-inner group">
                 {error ? (
-                  <div className="w-full h-full flex items-center justify-center text-slate-500">
-                    <AlertCircle size={24} />
+                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-4 text-center bg-slate-900 z-50 absolute inset-0">
+                    <AlertCircle size={24} className="mb-2 text-red-400" />
+                    <p className="text-[10px] font-bold mb-2 leading-tight text-slate-300">Camera Error</p>
+                    <button 
+                      onClick={handleRetry}
+                      className="bg-slate-700 text-white text-[9px] px-3 py-1.5 rounded-full hover:bg-slate-600 flex items-center gap-1 border border-slate-600"
+                    >
+                      <RefreshCw size={10} /> Retry
+                    </button>
                   </div>
                 ) : (
-                  <video 
-                    ref={videoRef}
-                    autoPlay 
-                    playsInline 
-                    muted 
-                    // Mirroring the preview here
-                    className="w-full h-full object-cover transform scale-x-[-1]"
-                  />
+                  <>
+                     <video 
+                        ref={videoRef}
+                        autoPlay 
+                        playsInline 
+                        muted 
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'} ${facingMode === 'user' ? 'transform scale-x-[-1]' : ''}`}
+                        data-facing-mode={facingMode}
+                     />
+                     {/* Loading Spinner */}
+                     {isLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                           <RefreshCw size={24} className="text-slate-600 animate-spin" />
+                        </div>
+                     )}
+                  </>
                 )}
                 {/* Lens Reflection/Glare */}
                 <div className="absolute top-4 right-8 w-8 h-4 bg-white opacity-10 rounded-full rotate-45 pointer-events-none"></div>
@@ -98,13 +145,9 @@ export const PolaroidCamera: React.FC<PolaroidCameraProps> = ({ videoRef, onShut
              </div>
           </div>
 
-          {/* Polaroid Label - Changed from Instax */}
-          <div className="absolute bottom-5 left-6 text-slate-500 font-bold flex items-center gap-1">
-             <div className="w-2 h-2 bg-slate-400 grid grid-cols-2 gap-[1px]">
-               <div className="bg-slate-500"></div><div className="bg-slate-500"></div>
-               <div className="bg-slate-500"></div><div className="bg-slate-500"></div>
-             </div>
-             <span className="text-sm text-indigo-900/60">Polaroid</span>
+          {/* Polaroid Label */}
+          <div className="absolute bottom-5 left-16 text-slate-500 font-bold flex items-center gap-1 pl-2">
+             <span className="text-sm text-indigo-900/60 tracking-wider">Polaroid</span>
           </div>
 
           {/* Speaker/Vent Slots */}
@@ -120,4 +163,4 @@ export const PolaroidCamera: React.FC<PolaroidCameraProps> = ({ videoRef, onShut
        </div>
     </div>
   );
-};
+}

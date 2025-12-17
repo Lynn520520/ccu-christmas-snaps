@@ -179,8 +179,6 @@ export const generatePolaroidCanvas = (photo: PhotoData): Promise<HTMLCanvasElem
 
         // Padding inside the photo for icons
         const iconInnerMargin = 20 * scaleFactor; 
-        // Increased safety margin for downloads to ensure no clipping
-        const safeIconMargin = 45 * scaleFactor; 
 
         if (photo.frameStyle === FrameStyle.SANTA) {
             // Top Left of photo
