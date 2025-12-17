@@ -3,7 +3,7 @@ import { PolaroidCamera } from './components/PolaroidCamera';
 import { FrameDesign } from './components/FrameDesign';
 import { DraggablePhoto } from './components/DraggablePhoto';
 import { FrameStyle, PhotoData } from './types';
-import { Check, User, Download, Sparkles, Camera, Images } from 'lucide-react';
+import { Check, User, Download, Sparkles, Camera, Images, Trash2, Hand } from 'lucide-react';
 import { generatePolaroidCanvas } from './utils/polaroidGenerator';
 import { saveFile } from './utils/downloadUtils';
 import JSZip from 'jszip';
@@ -126,6 +126,12 @@ export default function App() {
     setPhotos(prev => prev.filter(p => p.id !== id));
   };
 
+  const clearAllPhotos = () => {
+    if (window.confirm('Are you sure you want to clear all photos?')) {
+      setPhotos([]);
+    }
+  };
+
   const bringToFront = (id: string) => {
     setMaxZIndex(prev => prev + 1);
     setPhotos(prev => prev.map(p => p.id === id ? { ...p, zIndex: maxZIndex + 1 } : p));
@@ -165,7 +171,8 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-full h-screen bg-slate-50 overflow-hidden flex flex-col md:flex-row font-sans">
+    // Updated h-screen to h-[100dvh] for mobile browser address bar support
+    <div className="relative w-full h-[100dvh] bg-slate-50 overflow-hidden flex flex-col md:flex-row font-sans">
       
       <div className="absolute inset-0 pointer-events-none opacity-5 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-300 to-transparent"></div>
 
@@ -287,23 +294,42 @@ export default function App() {
              </button>
 
              {photos.length > 0 && (
-               <button
-                 onClick={handleBatchDownload}
-                 disabled={isZipping}
-                 className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-2xl px-4 py-2 md:px-6 md:py-3 rounded-full font-bold flex items-center gap-2 md:gap-3 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700"
-               >
-                  <Download size={16} className={isZipping ? 'animate-bounce' : ''} />
-                  <span className="text-xs md:text-sm">{isZipping ? '...' : 'Download All'}</span>
-                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-mono min-w-[20px] text-center">{photos.length}</span>
-               </button>
+               <>
+                 <button
+                   onClick={clearAllPhotos}
+                   className="bg-white/80 hover:bg-red-50 text-red-600 shadow-lg px-3 py-2 md:px-4 md:py-3 rounded-full font-bold flex items-center gap-2 transition-all transform hover:scale-105 active:scale-95 border border-red-100"
+                   title="Clear All"
+                 >
+                    <Trash2 size={16} />
+                    <span className="hidden md:inline text-xs">Clear</span>
+                 </button>
+
+                 <button
+                   onClick={handleBatchDownload}
+                   disabled={isZipping}
+                   className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-2xl px-4 py-2 md:px-6 md:py-3 rounded-full font-bold flex items-center gap-2 md:gap-3 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700"
+                 >
+                    <Download size={16} className={isZipping ? 'animate-bounce' : ''} />
+                    <span className="text-xs md:text-sm">{isZipping ? '...' : 'Download All'}</span>
+                    <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-mono min-w-[20px] text-center">{photos.length}</span>
+                 </button>
+               </>
              )}
          </div>
 
-         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+         {/* Canvas Empty State & Background Hints */}
+         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
             {photos.length === 0 && (
                 <div className="text-slate-300/60 text-2xl md:text-4xl font-script text-center p-8 md:p-12 -rotate-2 select-none border-4 border-dashed border-slate-200 rounded-[3rem] mx-4">
                   Snap a photo to start...
                 </div>
+            )}
+            {/* Interaction Hint (Shows briefly when photos exist) */}
+            {photos.length > 0 && (
+              <div className="absolute bottom-24 md:bottom-12 flex flex-col items-center gap-2 text-slate-400 opacity-60 animate-pulse">
+                  <Hand size={20} className="animate-bounce" />
+                  <span className="text-[10px] uppercase tracking-widest font-bold">Drag • Pinch • Rotate</span>
+              </div>
             )}
          </div>
 
@@ -321,7 +347,7 @@ export default function App() {
       </div>
 
       {/* --- MOBILE BOTTOM NAVIGATION --- */}
-      <div className="md:hidden absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur border-t border-slate-200 z-[80] flex justify-around pb-safe safe-area-inset-bottom">
+      <div className="md:hidden absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur border-t border-slate-200 z-[80] flex justify-around pb-safe">
           <button 
              onClick={() => setActiveTab('camera')}
              className={`flex flex-col items-center justify-center py-3 px-6 transition-colors duration-200 ${activeTab === 'camera' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
