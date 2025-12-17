@@ -5,10 +5,12 @@ import { DraggablePhoto } from './components/DraggablePhoto';
 import { FrameStyle, PhotoData } from './types';
 import { Check, User, Download, Sparkles, Camera, Images } from 'lucide-react';
 import { generatePolaroidCanvas } from './utils/polaroidGenerator';
+import { saveFile } from './utils/downloadUtils';
 import JSZip from 'jszip';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
+// New Type for Mobile Navigation
 type MobileTab = 'camera' | 'canvas';
 
 export default function App() {
@@ -19,19 +21,14 @@ export default function App() {
   const [maxZIndex, setMaxZIndex] = useState(10);
   const [isZipping, setIsZipping] = useState(false);
   
-  // Mobile Navigation State
+  // Mobile Navigation State (Default to camera)
   const [activeTab, setActiveTab] = useState<MobileTab>('camera');
   
-  // Countdown State
   const [countdown, setCountdown] = useState<number | null>(null);
-
-  // Printing State
   const [printingPhoto, setPrintingPhoto] = useState<PhotoData | null>(null);
 
-  // Camera Ref (Lifted from PolaroidCamera)
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Countdown Effect
   useEffect(() => {
     if (countdown === null) return;
 
@@ -39,7 +36,6 @@ export default function App() {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
-      // Countdown finished, Capture!
       handleCapture();
       setCountdown(null);
     }
@@ -63,16 +59,13 @@ export default function App() {
     canvas.height = videoElement.videoHeight;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      // Check if mirrored (front camera usually is, back isn't) - simplistic check based on transform class in DOM
-      // But simpler: The camera component handles preview mirroring.
-      // We need to know if we should mirror the capture. 
-      // Usually, if it's user-facing, we mirror. If environment, we don't.
-      // Since we don't have easy access to 'facingMode' state here without callback, 
-      // let's rely on the visual expectation: Front cams feel natural mirrored.
-      
-      const isMirrored = videoElement.style.transform.includes('scale-x-[-1]') || videoElement.className.includes('scale-x-[-1]');
-      
-      if (isMirrored) {
+      // Check facing mode to decide if we mirror the image
+      // Front camera ('user') usually needs mirroring to look like a mirror selfie
+      // Back camera ('environment') should NOT be mirrored
+      const facingMode = videoElement.getAttribute('data-facing-mode');
+      const isUserFacing = facingMode !== 'environment'; // Default to user if null
+
+      if (isUserFacing) {
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
       }
@@ -82,8 +75,8 @@ export default function App() {
       const dataUrl = canvas.toDataURL('image/png');
       const randomRotation = (Math.random() * 6) - 3; 
 
-      // On mobile, center loosely. On desktop, predefined.
       const isMobile = window.innerWidth < 768;
+      // Adjust initial position for mobile so it appears in the "Canvas" view center
       const initialX = isMobile ? window.innerWidth / 2 - 100 : window.innerWidth / 2 - 160;
       const initialY = isMobile ? window.innerHeight / 2 - 140 : window.innerHeight / 2 - 200;
       const initialScale = isMobile ? 0.7 : 1.0;
@@ -103,14 +96,13 @@ export default function App() {
 
       setMaxZIndex(prev => prev + 1);
       
-      // Start "Printing" Animation
       setPrintingPhoto(newPhoto);
 
-      // Animation duration match (wait for slide up then add to canvas)
       setTimeout(() => {
         setPhotos(prev => [...prev, newPhoto]);
         setPrintingPhoto(null);
-        // Auto switch to canvas tab on mobile so user sees the result
+        
+        // AUTO SWITCH TO CANVAS ON MOBILE
         if (window.innerWidth < 768) {
            setActiveTab('canvas');
         }
@@ -159,13 +151,14 @@ export default function App() {
         });
       }
       const content = await zip.generateAsync({ type: "blob" });
-      const link = document.createElement('a');
-      link.download = `CCU-Photos-Batch-${Date.now()}.zip`;
-      link.href = URL.createObjectURL(content);
-      link.click();
-      URL.revokeObjectURL(link.href);
+      const timestamp = new Date().toISOString().slice(0, 10);
+      
+      // Use the helper to save (Handles mobile share sheet vs desktop download)
+      await saveFile(content, `CCU-Photos-Batch-${timestamp}.zip`);
+      
     } catch (err) {
       console.error("Batch download failed", err);
+      alert("Failed to generate zip file. Please try downloading individual photos.");
     } finally {
       setIsZipping(false);
     }
@@ -174,14 +167,13 @@ export default function App() {
   return (
     <div className="relative w-full h-screen bg-slate-50 overflow-hidden flex flex-col md:flex-row font-sans">
       
-      {/* Background Decor */}
       <div className="absolute inset-0 pointer-events-none opacity-5 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-300 to-transparent"></div>
 
-      {/* --- SIDEBAR (Camera & Controls) --- */}
-      {/* Hidden on Mobile if activeTab is 'canvas', always shown on Desktop */}
-      <div className={`relative z-10 w-full md:w-[340px] lg:w-[380px] h-full bg-white/95 backdrop-blur-md border-r border-slate-200 shadow-2xl flex flex-col items-center p-4 overflow-y-auto shrink-0 no-scrollbar ${activeTab === 'canvas' ? 'hidden md:flex' : 'flex'}`}>
+      {/* --- LEFT SIDEBAR (Camera) --- */}
+      {/* Logic: Hidden on mobile if activeTab is 'canvas'. Always flex on md+ */}
+      <div className={`relative z-10 w-full md:w-[340px] lg:w-[380px] h-full bg-white/95 backdrop-blur-md border-r border-slate-200 shadow-2xl flex-col items-center p-4 overflow-y-auto shrink-0 no-scrollbar ${activeTab === 'canvas' ? 'hidden md:flex' : 'flex'}`}>
         
-        {/* Title Section */}
+        {/* Title */}
         <div className="mb-4 mt-2 text-center">
              <h1 className="font-script text-[3rem] leading-none text-[#b91c1c] font-bold mb-1 drop-shadow-sm transform -rotate-2">
                Christmas Snaps
@@ -193,7 +185,7 @@ export default function App() {
              </div>
         </div>
 
-        {/* Name Input */}
+        {/* Input */}
         <div className="w-full max-w-[220px] mb-6 relative z-30">
            <div className="relative">
               <div className="absolute top-3 left-3 flex items-start pointer-events-none">
@@ -202,7 +194,7 @@ export default function App() {
               <textarea
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
-                placeholder="Enter Name"
+                placeholder="Enter English Name"
                 rows={2}
                 className="block w-full pl-9 pr-3 py-2 bg-orange-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-200 focus:bg-white text-sm font-bold transition-all resize-none overflow-hidden leading-tight"
                 style={{ minHeight: '42px' }}
@@ -210,7 +202,7 @@ export default function App() {
            </div>
         </div>
 
-        {/* Camera Container */}
+        {/* Camera */}
         <div className="relative mb-6 flex justify-center w-full z-20">
             <PolaroidCamera 
                 videoRef={videoRef} 
@@ -236,8 +228,8 @@ export default function App() {
             )}
         </div>
 
-        {/* Frame Selector */}
-        <div className="w-full px-2 mb-20 md:mb-0">
+        {/* Designs */}
+        <div className="w-full px-2 mb-24 md:mb-0">
           <h3 className="text-slate-400 font-bold mb-2 uppercase tracking-wider text-[10px] pl-1 flex items-center gap-2 justify-center">
             <Sparkles size={12} /> Select Design
           </h3>
@@ -275,36 +267,36 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- CANVAS AREA --- */}
-      {/* Hidden on Mobile if activeTab is 'camera', always shown on Desktop */}
+      {/* --- RIGHT AREA (Canvas) --- */}
+      {/* Logic: Hidden on mobile if activeTab is 'camera'. Always block on md+ */}
       <div className={`flex-1 relative h-full bg-[#f8fafc] overflow-hidden touch-none ${activeTab === 'camera' ? 'hidden md:block' : 'block'}`}>
-         {/* Background Grid Pattern */}
+         {/* Grid */}
          <div className="absolute inset-0 opacity-[0.06] pointer-events-none" 
               style={{ backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '32px 32px' }}>
          </div>
 
-         {/* Top Right Controls */}
+         {/* Top Controls */}
          <div className="absolute top-6 right-6 md:right-8 z-[60] flex gap-2">
-            {/* Back to Camera Button (Mobile Only) */}
-            <button 
+             {/* Mobile: Back to Camera Button */}
+             <button 
                 onClick={() => setActiveTab('camera')}
-                className="md:hidden bg-white/80 backdrop-blur text-slate-700 shadow-md px-4 py-2 rounded-full font-bold flex items-center gap-2 border border-slate-200"
-            >
-                <Camera size={16} />
-                <span className="text-xs">New Photo</span>
-            </button>
-
-           {photos.length > 0 && (
-             <button
-               onClick={handleBatchDownload}
-               disabled={isZipping}
-               className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-2xl px-4 py-2 md:px-6 md:py-3 rounded-full font-bold flex items-center gap-2 md:gap-3 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700"
+                className="md:hidden bg-white/80 backdrop-blur text-slate-700 shadow-md px-4 py-2 rounded-full font-bold flex items-center gap-2 border border-slate-200 hover:bg-white"
              >
-                <Download size={16} className={isZipping ? 'animate-bounce' : ''} />
-                <span className="text-xs md:text-sm">{isZipping ? '...' : 'Download All'}</span>
-                <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-mono min-w-[20px] text-center">{photos.length}</span>
+                <Camera size={16} />
+                <span className="text-xs">Take Photo</span>
              </button>
-           )}
+
+             {photos.length > 0 && (
+               <button
+                 onClick={handleBatchDownload}
+                 disabled={isZipping}
+                 className="bg-zinc-900 hover:bg-zinc-800 text-white shadow-2xl px-4 py-2 md:px-6 md:py-3 rounded-full font-bold flex items-center gap-2 md:gap-3 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700"
+               >
+                  <Download size={16} className={isZipping ? 'animate-bounce' : ''} />
+                  <span className="text-xs md:text-sm">{isZipping ? '...' : 'Download All'}</span>
+                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-mono min-w-[20px] text-center">{photos.length}</span>
+               </button>
+             )}
          </div>
 
          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -315,7 +307,6 @@ export default function App() {
             )}
          </div>
 
-         {/* Interactive Photos */}
          {photos.map(photo => (
            <DraggablePhoto 
              key={photo.id} 
@@ -330,11 +321,10 @@ export default function App() {
       </div>
 
       {/* --- MOBILE BOTTOM NAVIGATION --- */}
-      {/* Only visible on mobile (hidden on md) */}
       <div className="md:hidden absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur border-t border-slate-200 z-[80] flex justify-around pb-safe safe-area-inset-bottom">
           <button 
              onClick={() => setActiveTab('camera')}
-             className={`flex flex-col items-center justify-center py-3 px-6 transition-colors ${activeTab === 'camera' ? 'text-red-600' : 'text-slate-400'}`}
+             className={`flex flex-col items-center justify-center py-3 px-6 transition-colors duration-200 ${activeTab === 'camera' ? 'text-red-600' : 'text-slate-400 hover:text-slate-600'}`}
           >
              <Camera size={24} className={activeTab === 'camera' ? 'fill-current' : ''} />
              <span className="text-[10px] font-bold mt-1">Camera</span>
@@ -342,12 +332,12 @@ export default function App() {
 
           <button 
              onClick={() => setActiveTab('canvas')}
-             className={`flex flex-col items-center justify-center py-3 px-6 transition-colors ${activeTab === 'canvas' ? 'text-indigo-600' : 'text-slate-400'}`}
+             className={`flex flex-col items-center justify-center py-3 px-6 transition-colors duration-200 ${activeTab === 'canvas' ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
           >
              <div className="relative">
                 <Images size={24} className={activeTab === 'canvas' ? 'fill-current' : ''} />
                 {photos.length > 0 && (
-                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold">
+                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-full font-bold shadow-sm animate-in zoom-in">
                         {photos.length}
                     </span>
                 )}
@@ -356,7 +346,7 @@ export default function App() {
           </button>
       </div>
 
-      {/* COUNTDOWN OVERLAY */}
+      {/* Countdown Overlay */}
       {countdown !== null && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none bg-black/20 backdrop-blur-[2px]">
             <div key={countdown} className="text-[15rem] md:text-[20rem] font-bold text-[#b91c1c] drop-shadow-[0_8px_30px_rgba(255,255,255,0.8)] animate-in zoom-in fade-in duration-300 font-sans leading-none">
@@ -365,7 +355,7 @@ export default function App() {
         </div>
       )}
 
-      {/* FLASH OVERLAY */}
+      {/* Flash Overlay */}
       <div 
         className={`fixed inset-0 bg-white z-[100] pointer-events-none transition-opacity duration-300 ease-out ${isFlashing ? 'opacity-100' : 'opacity-0'}`} 
       />
